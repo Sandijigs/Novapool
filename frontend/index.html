@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NovaPool — Token Maturity Dashboard</title>
+  <style>
+    :root {
+      --bg: #0a0a14; --card: #12121e; --border: #1e1e32;
+      --text: #e2e2f0; --muted: #8888aa;
+      --purple: #8b5cf6; --blue: #3b82f6; --cyan: #06b6d4;
+      --green: #22c55e; --yellow: #eab308; --orange: #f97316;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; padding: 2rem;
+    }
+    .header { text-align:center; margin-bottom:2rem; }
+    .header h1 { font-size:2.2rem; font-weight:700; }
+    .header h1 span { background: linear-gradient(135deg, var(--purple), var(--cyan));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .header p { color:var(--muted); margin-top:0.4rem; }
+
+    .grid { display:grid; gap:1.5rem; max-width:960px; margin:0 auto;
+      grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width:768px) { .grid { grid-template-columns:1fr; } }
+
+    .card { background:var(--card); border:1px solid var(--border);
+      border-radius:14px; padding:1.5rem; }
+    .card h2 { font-size:0.8rem; color:var(--muted); text-transform:uppercase;
+      letter-spacing:0.06em; margin-bottom:0.8rem; }
+    .card.full { grid-column:1/-1; }
+    .card.half { grid-column: span 2; }
+
+    .phase-badge { display:inline-block; padding:0.3rem 1rem; border-radius:999px;
+      font-weight:700; font-size:1.1rem; }
+    .ph-nascent    { background:#1e0a3a; color:#c084fc; }
+    .ph-emerging   { background:#0a2540; color:#60a5fa; }
+    .ph-growing    { background:#052e16; color:#4ade80; }
+    .ph-established{ background:#1a2e05; color:#a3e635; }
+
+    .stat { font-size:2rem; font-weight:700; }
+    .stat small { font-size:0.85rem; color:var(--muted); }
+
+    .progress { height:8px; border-radius:4px; background:var(--border);
+      margin-top:0.5rem; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:4px; transition:width 0.5s ease; }
+
+    .btn { padding:0.5rem 1.1rem; border:none; border-radius:8px;
+      font-weight:600; cursor:pointer; font-size:0.85rem;
+      transition:opacity 0.15s; color:#fff; }
+    .btn:hover { opacity:0.85; }
+    .btn-purple { background:var(--purple); }
+    .btn-blue   { background:var(--blue); }
+    .btn-cyan   { background:var(--cyan); color:#000; }
+    .btn-green  { background:var(--green); color:#000; }
+
+    .sim-group { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem; }
+
+    .fee-tiers { display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; margin-top:0.75rem; }
+    .tier { padding:0.75rem; border-radius:10px; text-align:center; }
+    .tier .label { font-size:0.7rem; color:var(--muted); text-transform:uppercase; }
+    .tier .val { font-size:1.3rem; font-weight:700; margin-top:0.25rem; }
+    .tier.active { border:2px solid; }
+
+    .log { max-height:220px; overflow-y:auto; font-family:monospace;
+      font-size:0.75rem; line-height:1.6; }
+    .log-entry { padding:0.2rem 0; border-bottom:1px solid var(--border); }
+    .log-time { color:var(--muted); }
+
+    .metrics-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-top:0.5rem; }
+    .metric { text-align:center; }
+    .metric .val { font-size:1.4rem; font-weight:700; }
+    .metric .lbl { font-size:0.7rem; color:var(--muted); margin-top:0.2rem; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌟 <span>NovaPool</span></h1>
+  <p>Graduated liquidity for long-tail & emerging tokens</p>
+</div>
+
+<div class="grid">
+  <!-- Phase Card -->
+  <div class="card">
+    <h2>Maturity Phase</h2>
+    <div id="phaseBadge" class="phase-badge ph-nascent">NASCENT</div>
+    <div class="progress"><div class="progress-fill" id="phaseBar" style="width:10%;background:var(--purple);"></div></div>
+    <p style="margin-top:0.5rem;color:var(--muted);font-size:0.8rem;">Phase <span id="phaseNum">0</span> of 3</p>
+  </div>
+
+  <!-- Fee Card -->
+  <div class="card">
+    <h2>Current Fee</h2>
+    <div class="stat" id="feeValue">1.00%</div>
+    <p style="color:var(--muted);font-size:0.8rem;margin-top:0.3rem;">
+      <span id="feeRaw">10000</span> / 1,000,000
+    </p>
+  </div>
+
+  <!-- Swap Guard Card -->
+  <div class="card">
+    <h2>Swap Guard</h2>
+    <div class="stat" style="font-size:1.5rem;">5%<small> max swap</small></div>
+    <p style="color:var(--muted);font-size:0.8rem;margin-top:0.3rem;">60s cooldown on large trades</p>
+  </div>
+
+  <!-- Metrics Card -->
+  <div class="card full">
+    <h2>Maturity Metrics</h2>
+    <div class="metrics-grid">
+      <div class="metric"><div class="val" id="volValue">0</div><div class="lbl">Cumulative Volume (ETH)</div></div>
+      <div class="metric"><div class="val" id="traderValue">0</div><div class="lbl">Unique Traders</div></div>
+      <div class="metric"><div class="val" id="ageValue">0m</div><div class="lbl">Pool Age</div></div>
+    </div>
+  </div>
+
+  <!-- Fee Tiers Visual -->
+  <div class="card full">
+    <h2>Fee Graduation Tiers</h2>
+    <div class="fee-tiers">
+      <div class="tier active" id="tier0" style="background:#1e0a3a;border-color:#c084fc;">
+        <div class="label">Nascent</div><div class="val" style="color:#c084fc;">1.00%</div>
+      </div>
+      <div class="tier" id="tier1" style="background:#0a2540;">
+        <div class="label">Emerging</div><div class="val" style="color:#60a5fa;">0.67%</div>
+      </div>
+      <div class="tier" id="tier2" style="background:#052e16;">
+        <div class="label">Growing</div><div class="val" style="color:#4ade80;">0.34%</div>
+      </div>
+      <div class="tier" id="tier3" style="background:#1a2e05;">
+        <div class="label">Established</div><div class="val" style="color:#a3e635;">0.05%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simulate -->
+  <div class="card half">
+    <h2>Simulate Activity</h2>
+    <p style="color:var(--muted);font-size:0.85rem;">Simulate trades to drive maturity progression.</p>
+    <div class="sim-group">
+      <button class="btn btn-purple" onclick="simSwap(0.005)">Small Swap (0.005 ETH)</button>
+      <button class="btn btn-blue"   onclick="simSwap(0.05)">Medium Swap (0.05 ETH)</button>
+      <button class="btn btn-cyan"   onclick="simSwap(0.2)">Large Swap (0.2 ETH)</button>
+      <button class="btn btn-green"  onclick="simAge()">+1 Day Age</button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card" style="grid-column: span 1;">
+    <h2>Event Log</h2>
+    <div class="log" id="eventLog">
+      <div class="log-entry"><span class="log-time">[start]</span> Dashboard loaded</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const PHASES = ["NASCENT","EMERGING","GROWING","ESTABLISHED"];
+  const PH_CLASS = ["ph-nascent","ph-emerging","ph-growing","ph-established"];
+  const PH_COLOR = ["var(--purple)","var(--blue)","var(--green)","#a3e635"];
+  const FEES = [10000, 6675, 3350, 500];
+  const FEE_PCT = ["1.00%","0.67%","0.34%","0.05%"];
+  const BAR_W = ["10%","40%","70%","100%"];
+
+  const CONFIG = {
+    volEmerging:0.01, volGrowing:0.05, volEstablished:0.1,
+    ageEmerging:60, ageGrowing:300, ageEstablished:600
+  };
+
+  let state = { phase:0, volume:0, traders:1, age:0 };
+
+  function simSwap(amount) {
+    state.volume += amount;
+    addLog(`Swap: ${amount} ETH (total vol: ${state.volume.toFixed(4)})`);
+    checkAdvance();
+    updateUI();
+  }
+
+  function simAge() {
+    state.age += 86400;
+    addLog(`+1 day (age: ${Math.floor(state.age/60)}m)`);
+    checkAdvance();
+    updateUI();
+  }
+
+  function checkAdvance() {
+    if (state.phase===0 && state.volume>=CONFIG.volEmerging && state.age>=CONFIG.ageEmerging) {
+      state.phase=1; addLog("🎉 Phase → EMERGING");
+    }
+    if (state.phase===1 && state.volume>=CONFIG.volGrowing && state.age>=CONFIG.ageGrowing) {
+      state.phase=2; addLog("🎉 Phase → GROWING");
+    }
+    if (state.phase===2 && state.volume>=CONFIG.volEstablished && state.age>=CONFIG.ageEstablished) {
+      state.phase=3; addLog("🎉 Phase → ESTABLISHED");
+    }
+  }
+
+  function updateUI() {
+    const p = state.phase;
+    document.getElementById("phaseBadge").textContent = PHASES[p];
+    document.getElementById("phaseBadge").className = "phase-badge "+PH_CLASS[p];
+    document.getElementById("phaseNum").textContent = p;
+    document.getElementById("phaseBar").style.width = BAR_W[p];
+    document.getElementById("phaseBar").style.background = PH_COLOR[p];
+    document.getElementById("feeValue").textContent = FEE_PCT[p];
+    document.getElementById("feeRaw").textContent = FEES[p];
+    document.getElementById("volValue").textContent = state.volume.toFixed(4);
+    document.getElementById("traderValue").textContent = state.traders;
+    document.getElementById("ageValue").textContent = state.age>=86400?Math.floor(state.age/86400)+"d":Math.floor(state.age/60)+"m";
+
+    for(let i=0;i<4;i++){
+      const t = document.getElementById("tier"+i);
+      if(i===p){ t.classList.add("active"); t.style.borderColor=PH_COLOR[i]; }
+      else { t.classList.remove("active"); t.style.borderColor="transparent"; }
+    }
+  }
+
+  function addLog(msg) {
+    const log = document.getElementById("eventLog");
+    const el = document.createElement("div");
+    el.className = "log-entry";
+    el.innerHTML = `<span class="log-time">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+    log.prepend(el);
+  }
+</script>
+</body>
+</html>

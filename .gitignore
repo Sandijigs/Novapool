@@ -1,0 +1,9 @@
+out/
+cache/
+lib/
+.env
+.vscode/
+.idea/
+.DS_Store
+lcov.info
+coverage/
