@@ -8,6 +8,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {INovaPool} from "./interfaces/INovaPool.sol";
@@ -37,6 +38,7 @@ import {INovaPool} from "./interfaces/INovaPool.sol";
 contract NovaPoolHook is BaseHook, INovaPool {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
+    using LPFeeLibrary for uint24;
 
     // ─────────────────────────────────────────────────────────
     //  Immutables & Storage
@@ -141,7 +143,7 @@ contract NovaPoolHook is BaseHook, INovaPool {
     function _beforeSwap(
         address sender,
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
+        SwapParams calldata params,
         bytes calldata
     )
         internal override returns (bytes4, BeforeSwapDelta, uint24)
@@ -203,7 +205,7 @@ contract NovaPoolHook is BaseHook, INovaPool {
     function _afterSwap(
         address sender,
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
+        SwapParams calldata params,
         BalanceDelta,
         bytes calldata
     )
