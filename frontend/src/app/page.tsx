@@ -10,6 +10,7 @@ import { SwapGuardCard } from "@/components/SwapGuardCard";
 import { OnChainStatus } from "@/components/OnChainStatus";
 import { PoolLookup } from "@/components/PoolLookup";
 import { ConfigurePoolForm } from "@/components/ConfigurePoolForm";
+import { OnChainEventLog } from "@/components/OnChainEventLog";
 import { useNovaPool } from "@/lib/useNovaPool";
 import { WalletButton } from "@/components/WalletButton";
 import { useAccount } from "wagmi";
@@ -49,6 +50,7 @@ export default function Dashboard() {
         <OnChainStatus />
         <ConfigurePoolForm />
         <PoolLookup />
+        <OnChainEventLog />
       </div>
 
       {/* Simulation dashboard */}
