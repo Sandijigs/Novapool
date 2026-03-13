@@ -49,7 +49,7 @@ contract NovaPoolFullE2ETest is Test, Deployers {
             Hooks.AFTER_SWAP_FLAG
         );
         address hookAddr = address(flags);
-        deployCodeTo("NovaPoolHook.sol", abi.encode(manager), hookAddr);
+        deployCodeTo("NovaPoolHook.sol", abi.encode(manager, address(this)), hookAddr);
         hook = NovaPoolHook(hookAddr);
 
         poolKey = PoolKey({

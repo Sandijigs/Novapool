@@ -73,7 +73,7 @@ contract NovaPoolHookTest is Test, Deployers {
 
         deployCodeTo(
             "NovaPoolHook.sol",
-            abi.encode(manager),
+            abi.encode(manager, address(this)),
             hookAddr
         );
         hook = NovaPoolHook(hookAddr);

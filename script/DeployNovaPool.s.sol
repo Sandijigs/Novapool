@@ -30,7 +30,16 @@ contract DeployNovaPool is Script {
         // Verify PoolManager has code on this chain
         require(poolManager.code.length > 0, "POOL_MANAGER_ADDRESS has no code - wrong chain?");
 
+        // The deployer wallet (msg.sender during broadcast) becomes the hook owner
+        address deployer = vm.envAddress("DEPLOYER_ADDRESS");
+        if (deployer == address(0)) {
+            // Fallback: derive from PRIVATE_KEY
+            uint256 pk = vm.envUint("PRIVATE_KEY");
+            deployer = vm.addr(pk);
+        }
+
         console.log("PoolManager:", poolManager);
+        console.log("Owner:      ", deployer);
 
         // ── Define required hook flags ───────────────────────────
         // NovaPool uses: beforeInitialize, afterInitialize, beforeSwap, afterSwap
@@ -42,7 +51,7 @@ contract DeployNovaPool is Script {
         );
 
         // ── Mine a salt that produces an address with correct flag bits ──
-        bytes memory constructorArgs = abi.encode(poolManager);
+        bytes memory constructorArgs = abi.encode(poolManager, deployer);
         (address hookAddress, bytes32 salt) = HookMiner.find(
             CREATE2_DEPLOYER,
             flags,
@@ -56,7 +65,7 @@ contract DeployNovaPool is Script {
         // ── Deploy ───────────────────────────────────────────────
         vm.startBroadcast();
 
-        NovaPoolHook hook = new NovaPoolHook{salt: salt}(IPoolManager(poolManager));
+        NovaPoolHook hook = new NovaPoolHook{salt: salt}(IPoolManager(poolManager), deployer);
 
         vm.stopBroadcast();
 

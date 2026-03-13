@@ -74,8 +74,9 @@ contract NovaPoolHook is BaseHook, INovaPool {
     //  Constructor
     // ─────────────────────────────────────────────────────────
 
-    constructor(IPoolManager _pm) BaseHook(_pm) {
-        owner = msg.sender;
+    constructor(IPoolManager _pm, address _owner) BaseHook(_pm) {
+        if (_owner == address(0)) revert InvalidConfig();
+        owner = _owner;
     }
 
     // ─────────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ contract NovaPoolE2ETest is Test, Deployers {
         );
         address hookAddr = address(flags);
 
-        deployCodeTo("NovaPoolHook.sol", abi.encode(manager), hookAddr);
+        deployCodeTo("NovaPoolHook.sol", abi.encode(manager, address(this)), hookAddr);
         hook = NovaPoolHook(hookAddr);
 
         // Create pool key
