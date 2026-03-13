@@ -1,4 +1,4 @@
-# 🌟 NovaPool
+# NovaPool
 
 **Graduated liquidity for long-tail and newly launched tokens on Uniswap v4.**
 
@@ -88,23 +88,57 @@ Phases only advance forward — they never regress. This creates a transparent, 
 
 ---
 
+## Deployed Contracts
+
+| Contract | Network | Address |
+|----------|---------|---------|
+| **NovaPoolHook** | Unichain Sepolia (1301) | `0xBF4110c00e87c6658264F7E4dDbd6857045330c0` |
+| PoolManager | Unichain Sepolia (1301) | `0x00B036B58a818B1BC34d502D3fE730Db729e62AC` |
+
+The hook is deployed using CREATE2 with a mined salt so the contract address encodes the correct Uniswap v4 hook permission flags (beforeInitialize, afterInitialize, beforeSwap, afterSwap).
+
+---
+
 ## Project Structure
 
 ```
 novapool/
 ├── src/
-│   ├── NovaPoolHook.sol              # Uniswap v4 hook — all logic
+│   ├── NovaPoolHook.sol              # Uniswap v4 hook — all core logic
 │   └── interfaces/
 │       └── INovaPool.sol             # Shared types, events, errors
 ├── test/
-│   └── NovaPoolHook.t.sol            # Comprehensive test suite
+│   ├── NovaPoolHook.t.sol            # 29 unit tests
+│   ├── NovaPoolE2E.t.sol             # End-to-end lifecycle test
+│   └── NovaPoolFullE2E.t.sol         # 8 comprehensive E2E tests
 ├── script/
-│   └── DeployNovaPool.s.sol          # Deployment script
-├── frontend/
-│   └── index.html                    # Demo dashboard
+│   └── DeployNovaPool.s.sol          # CREATE2 deployment with HookMiner
+├── frontend/                         # Next.js 16 + TypeScript + Tailwind
+│   ├── src/app/                      # App router pages
+│   ├── src/components/
+│   │   ├── Providers.tsx             # wagmi + RainbowKit + React Query
+│   │   ├── WalletButton.tsx          # Wallet connect button
+│   │   ├── OnChainStatus.tsx         # Live hook contract info
+│   │   ├── ConfigurePoolForm.tsx     # Pool configuration form (on-chain tx)
+│   │   ├── PoolLookup.tsx            # Query pool maturity by ID
+│   │   ├── PoolRegistry.tsx          # All configured pools from events
+│   │   ├── OnChainEventLog.tsx       # Live event subscription feed
+│   │   ├── PhaseCard.tsx             # Phase badge + progress bar
+│   │   ├── FeeCard.tsx               # Current fee display
+│   │   ├── SwapGuardCard.tsx         # Anti-manipulation params
+│   │   ├── MetricsCard.tsx           # Volume, traders, age
+│   │   ├── FeeTiersCard.tsx          # 4-tier fee graduation visual
+│   │   ├── SimulateCard.tsx          # Swap/time/trader simulation
+│   │   └── EventLog.tsx              # Simulation event log
+│   └── src/lib/
+│       ├── wagmi.ts                  # Wagmi config + Unichain chains
+│       ├── abi.ts                    # NovaPoolHook ABI
+│       ├── types.ts                  # TypeScript types + constants
+│       ├── useNovaPool.ts            # Simulation state hook
+│       ├── useOnChainPool.ts         # On-chain read hooks (wagmi)
+│       └── usePoolRegistry.ts        # Event-based pool registry
 ├── foundry.toml
 ├── remappings.txt
-├── setup.sh
 ├── .env.example
 └── README.md
 ```
@@ -113,24 +147,27 @@ novapool/
 
 ## Getting Started
 
+### Prerequisites
+
+- [Foundry](https://getfoundry.sh/) (forge, cast)
+- [Node.js](https://nodejs.org/) >= 18
+- A wallet with Unichain Sepolia ETH ([faucet](https://faucet.unichain.org/))
+
 ### Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/novapool.git
+git clone https://github.com/Sandijigs/Novapool.git
 cd novapool
-chmod +x setup.sh
-./setup.sh
+forge install
 ```
 
 ### Run Tests
 
 ```bash
-forge test -vvv
+forge test -v
 ```
 
-### Test Coverage
-
-The test suite covers:
+**38 tests** across 3 test suites covering:
 
 1. **Deployment & initialization** — owner, config storage, dynamic fee validation
 2. **Graduated fee tiers** — correct fee at each maturity phase
@@ -141,7 +178,46 @@ The test suite covers:
 7. **Volume tracking** — accumulates across swaps
 8. **Config validation** — rejects invalid configs, owner-only access
 9. **Events** — phase advancement and fee application events
-10. **Full lifecycle** — NASCENT → EMERGING → GROWING → ESTABLISHED with fee verification
+10. **Full lifecycle** — NASCENT -> EMERGING -> GROWING -> ESTABLISHED with fee verification
+
+### Deploy to Unichain
+
+```bash
+# Copy and fill in your .env
+cp .env.example .env
+# Edit .env with your PRIVATE_KEY and DEPLOYER_ADDRESS
+
+# Deploy to Sepolia testnet
+source .env
+forge script script/DeployNovaPool.s.sol \
+  --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
+```
+
+The deploy script uses `HookMiner` to find a CREATE2 salt that produces an address with the correct hook permission flags, then deploys via the standard CREATE2 proxy.
+
+### Run Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) — connect your wallet via RainbowKit to access on-chain features.
+
+---
+
+## Frontend Features
+
+| Feature | Description |
+|---------|-------------|
+| **Wallet Connection** | RainbowKit + wagmi with Unichain Sepolia/Mainnet chain support |
+| **On-Chain Contract Info** | Live reads of hook owner, pool manager from deployed contract |
+| **Configure Pool** | Form to call `configurePool()` on-chain (owner only) |
+| **Pool Lookup** | Enter any pool ID to query live maturity phase, fee, volume, traders, age |
+| **Pool Registry** | Scans `PoolConfigured` events to list all NovaPool-managed pools |
+| **Live Event Log** | Real-time subscription to PhaseAdvanced, GraduatedFeeApplied, CooldownApplied, PoolConfigured events |
+| **Simulation Dashboard** | Interactive simulation of swap volume, time progression, and trader count to visualize fee graduation |
 
 ---
 
@@ -158,6 +234,22 @@ If a token simultaneously meets all criteria for ESTABLISHED (perhaps through a 
 
 **Why max swap size as a percentage of liquidity?**
 A fixed dollar cap doesn't scale — $100 is a huge trade for a $1K pool but meaningless for a $10M pool. Using liquidity as the reference ensures the guard scales naturally with pool depth.
+
+**Why CREATE2 deployment?**
+Uniswap v4 requires hook contract addresses to encode permission flags in the lowest 14 bits. The deploy script mines a CREATE2 salt that produces an address with the correct bits set for beforeInitialize, afterInitialize, beforeSwap, and afterSwap.
+
+**Why explicit owner in constructor?**
+When deploying via the CREATE2 proxy (`0x4e59...956C`), `msg.sender` is the proxy itself, not the deployer wallet. The constructor accepts an explicit `_owner` parameter to ensure the deployer retains admin control over `configurePool()`.
+
+---
+
+## Tech Stack
+
+- **Smart Contracts:** Solidity 0.8.26, Foundry, Uniswap v4 Core + Periphery
+- **Deployment:** CREATE2 with HookMiner salt mining, Unichain Sepolia
+- **Frontend:** Next.js 16, TypeScript, Tailwind CSS v4
+- **Wallet Integration:** wagmi v2, viem v2, RainbowKit, TanStack Query
+- **Chain:** Unichain (Uniswap's L2) — Sepolia testnet + Mainnet ready
 
 ---
 
