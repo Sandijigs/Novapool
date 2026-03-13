@@ -1,3 +1,5 @@
+"use client";
+
 import { MaturityPhase, PHASE_NAMES } from "@/lib/types";
 
 const PHASE_STYLES: Record<MaturityPhase, { bg: string; text: string; bar: string }> = {
@@ -24,11 +26,35 @@ const PHASE_STYLES: Record<MaturityPhase, { bg: string; text: string; bar: strin
 };
 
 interface PhaseCardProps {
-  phase: MaturityPhase;
+  phase: MaturityPhase | undefined;
   progress: number;
+  isLoading?: boolean;
 }
 
-export function PhaseCard({ phase, progress }: PhaseCardProps) {
+export function PhaseCard({ phase, progress, isLoading }: PhaseCardProps) {
+  if (isLoading) {
+    return (
+      <div className="rounded-2xl border border-card-border bg-card p-6 animate-pulse">
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted">
+          Maturity Phase
+        </h2>
+        <div className="h-8 w-32 rounded-full bg-card-border" />
+        <div className="mt-3 h-2 rounded-full bg-card-border" />
+      </div>
+    );
+  }
+
+  if (phase === undefined) {
+    return (
+      <div className="rounded-2xl border border-card-border bg-card p-6">
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted">
+          Maturity Phase
+        </h2>
+        <p className="text-sm text-muted">Select a pool to view</p>
+      </div>
+    );
+  }
+
   const style = PHASE_STYLES[phase];
 
   return (
