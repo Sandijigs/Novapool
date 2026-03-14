@@ -1,3 +1,131 @@
+// ─── PoolManager ABI (initialize only) ───
+export const poolManagerAbi = [
+  {
+    type: "function",
+    name: "initialize",
+    inputs: [
+      {
+        name: "key",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+      { name: "sqrtPriceX96", type: "uint160" },
+    ],
+    outputs: [{ name: "tick", type: "int24" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+// ─── NovaPoolRouter ABI ───
+export const novaPoolRouterAbi = [
+  {
+    type: "function",
+    name: "swap",
+    inputs: [
+      {
+        name: "key",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+      { name: "zeroForOne", type: "bool" },
+      { name: "amountSpecified", type: "int256" },
+      { name: "sqrtPriceLimitX96", type: "uint160" },
+    ],
+    outputs: [{ name: "delta", type: "int256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "modifyLiquidity",
+    inputs: [
+      {
+        name: "key",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+      { name: "tickLower", type: "int24" },
+      { name: "tickUpper", type: "int24" },
+      { name: "liquidityDelta", type: "int256" },
+    ],
+    outputs: [{ name: "delta", type: "int256" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+// ─── ERC20 ABI (approve, balanceOf, allowance, mint, symbol, decimals) ───
+export const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "allowance",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "mint",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "symbol",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "decimals",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+  },
+] as const;
+
+// ─── NovaPoolHook ABI ───
 export const novaPoolHookAbi = [
   {
     type: "function",
@@ -138,9 +266,9 @@ export const novaPoolHookAbi = [
     type: "event",
     name: "PhaseAdvanced",
     inputs: [
-      { name: "poolId", type: "bytes32", indexed: false },
-      { name: "from", type: "uint8", indexed: false },
-      { name: "to", type: "uint8", indexed: false },
+      { name: "poolId", type: "bytes32", indexed: true },
+      { name: "oldPhase", type: "uint8", indexed: false },
+      { name: "newPhase", type: "uint8", indexed: false },
       { name: "cumulativeVolume", type: "uint256", indexed: false },
       { name: "uniqueTraders", type: "uint32", indexed: false },
     ],
@@ -149,7 +277,7 @@ export const novaPoolHookAbi = [
     type: "event",
     name: "GraduatedFeeApplied",
     inputs: [
-      { name: "poolId", type: "bytes32", indexed: false },
+      { name: "poolId", type: "bytes32", indexed: true },
       { name: "phase", type: "uint8", indexed: false },
       { name: "fee", type: "uint24", indexed: false },
     ],
@@ -158,16 +286,16 @@ export const novaPoolHookAbi = [
     type: "event",
     name: "CooldownApplied",
     inputs: [
-      { name: "poolId", type: "bytes32", indexed: false },
-      { name: "trader", type: "address", indexed: false },
-      { name: "expiresAt", type: "uint256", indexed: false },
+      { name: "poolId", type: "bytes32", indexed: true },
+      { name: "sender", type: "address", indexed: true },
+      { name: "cooldownUntil", type: "uint256", indexed: false },
     ],
   },
   {
     type: "event",
     name: "PoolConfigured",
     inputs: [
-      { name: "poolId", type: "bytes32", indexed: false },
+      { name: "poolId", type: "bytes32", indexed: true },
       {
         name: "config",
         type: "tuple",
