@@ -2,7 +2,7 @@
 
 **Graduated liquidity for long-tail and newly launched tokens on Uniswap v4.**
 
-NovaPool is a Uniswap v4 hook that creates safer, more efficient markets for emerging assets by implementing graduated fee curves, anti-manipulation guards, and on-chain maturity scoring.
+NovaPool is a Uniswap v4 hook that creates safer, more efficient markets for emerging assets by implementing graduated fee curves, anti-manipulation guards, and on-chain maturity scoring — with a full-featured frontend for configuring, trading, and monitoring pools in real time.
 
 > **Hookathon Submission** — UHI8 "Specialized Markets" theme
 
@@ -84,16 +84,35 @@ Phases only advance forward — they never regress. This creates a transparent, 
 │  └─────────────────┘                                    │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│                  NovaPoolRouter.sol                       │
+│                                                          │
+│  Handles PoolManager unlock/callback pattern so users    │
+│  can execute swaps and liquidity operations from the     │
+│  frontend. Manages token settlement (sync → transfer     │
+│  → settle for payments, take for withdrawals).           │
+│                                                          │
+│  • swap(PoolKey, zeroForOne, amount, priceLimit)         │
+│  • modifyLiquidity(PoolKey, tickLower, tickUpper, delta) │
+│  • unlockCallback(data) — dispatches to internal handler │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Deployed Contracts
 
-| Contract | Network | Address |
-|----------|---------|---------|
-| **NovaPoolHook** | Unichain Sepolia (1301) | `0xBF4110c00e87c6658264F7E4dDbd6857045330c0` |
-| PoolManager | Unichain Sepolia (1301) | `0x00B036B58a818B1BC34d502D3fE730Db729e62AC` |
+All contracts are deployed on **Unichain Sepolia (chain ID 1301)**.
+
+| Contract | Address |
+|----------|---------|
+| **NovaPoolHook** | `0xBF4110c00e87c6658264F7E4dDbd6857045330c0` |
+| **NovaPoolRouter** | `0xf8eC9B25c12B2FAE1F0C63cFa92fCcf0285b27B7` |
+| **MockERC20 (NOVA-A)** | `0x8d3E422597eAB29CF008E690e0297f547E1f8C48` |
+| **MockERC20 (NOVA-B)** | `0x1976a08748c01F51FedA58Fe31f68fB42083E9C1` |
+| PoolManager (Uniswap v4) | `0x00B036B58a818B1BC34d502D3fE730Db729e62AC` |
 
 The hook is deployed using CREATE2 with a mined salt so the contract address encodes the correct Uniswap v4 hook permission flags (beforeInitialize, afterInitialize, beforeSwap, afterSwap).
 
@@ -105,6 +124,8 @@ The hook is deployed using CREATE2 with a mined salt so the contract address enc
 novapool/
 ├── src/
 │   ├── NovaPoolHook.sol              # Uniswap v4 hook — all core logic
+│   ├── NovaPoolRouter.sol            # Router for swaps & liquidity (unlock/callback)
+│   ├── MockERC20.sol                 # Mintable ERC20 for demo tokens
 │   └── interfaces/
 │       └── INovaPool.sol             # Shared types, events, errors
 ├── test/
@@ -112,7 +133,8 @@ novapool/
 │   ├── NovaPoolE2E.t.sol             # End-to-end lifecycle test
 │   └── NovaPoolFullE2E.t.sol         # 8 comprehensive E2E tests
 ├── script/
-│   └── DeployNovaPool.s.sol          # CREATE2 deployment with HookMiner
+│   ├── DeployNovaPool.s.sol          # CREATE2 deployment with HookMiner
+│   └── DeployRouter.s.sol            # Deploy Router + MockERC20 demo tokens
 ├── frontend/                         # Next.js 16 + TypeScript + Tailwind
 │   ├── src/app/                      # App router pages
 │   ├── src/components/
@@ -120,21 +142,22 @@ novapool/
 │   │   ├── WalletButton.tsx          # Wallet connect button
 │   │   ├── OnChainStatus.tsx         # Live hook contract info
 │   │   ├── ConfigurePoolForm.tsx     # Pool configuration form (on-chain tx)
-│   │   ├── PoolLookup.tsx            # Query pool maturity by ID
+│   │   ├── InitializePoolForm.tsx    # Create new pool on PoolManager
+│   │   ├── SwapForm.tsx              # Execute swaps via Router
+│   │   ├── AddLiquidityForm.tsx      # Provide liquidity via Router
+│   │   ├── MintTestTokens.tsx        # Mint demo NOVA-A/NOVA-B tokens
+│   │   ├── PoolSelector.tsx          # Manual pool ID input
 │   │   ├── PoolRegistry.tsx          # All configured pools from events
 │   │   ├── OnChainEventLog.tsx       # Live event subscription feed
 │   │   ├── PhaseCard.tsx             # Phase badge + progress bar
 │   │   ├── FeeCard.tsx               # Current fee display
 │   │   ├── SwapGuardCard.tsx         # Anti-manipulation params
 │   │   ├── MetricsCard.tsx           # Volume, traders, age
-│   │   ├── FeeTiersCard.tsx          # 4-tier fee graduation visual
-│   │   ├── SimulateCard.tsx          # Swap/time/trader simulation
-│   │   └── EventLog.tsx              # Simulation event log
+│   │   └── FeeTiersCard.tsx          # 4-tier fee graduation visual
 │   └── src/lib/
-│       ├── wagmi.ts                  # Wagmi config + Unichain chains
-│       ├── abi.ts                    # NovaPoolHook ABI
+│       ├── wagmi.ts                  # Wagmi config + chain definitions + addresses
+│       ├── abi.ts                    # ABIs: Hook, Router, PoolManager, ERC20
 │       ├── types.ts                  # TypeScript types + constants
-│       ├── useNovaPool.ts            # Simulation state hook
 │       ├── useOnChainPool.ts         # On-chain read hooks (wagmi)
 │       └── usePoolRegistry.ts        # Event-based pool registry
 ├── foundry.toml
@@ -182,18 +205,28 @@ forge test -v
 
 ### Deploy to Unichain
 
+#### 1. Deploy Hook (CREATE2)
+
 ```bash
-# Copy and fill in your .env
 cp .env.example .env
 # Edit .env with your PRIVATE_KEY and DEPLOYER_ADDRESS
 
-# Deploy to Sepolia testnet
 source .env
 forge script script/DeployNovaPool.s.sol \
   --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
 ```
 
-The deploy script uses `HookMiner` to find a CREATE2 salt that produces an address with the correct hook permission flags, then deploys via the standard CREATE2 proxy.
+The deploy script uses `HookMiner` to find a CREATE2 salt that produces an address with the correct hook permission flags.
+
+#### 2. Deploy Router + Demo Tokens
+
+```bash
+source .env
+forge script script/DeployRouter.s.sol \
+  --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
+```
+
+This deploys `NovaPoolRouter` (for swap/liquidity operations) and two `MockERC20` tokens (NOVA-A, NOVA-B) for demo purposes. Update the deployed addresses in `frontend/src/lib/wagmi.ts`.
 
 ### Run Frontend
 
@@ -203,7 +236,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — connect your wallet via RainbowKit to access on-chain features.
+Open [http://localhost:3000](http://localhost:3000) — connect your wallet via RainbowKit to access all features.
 
 ---
 
@@ -213,11 +246,31 @@ Open [http://localhost:3000](http://localhost:3000) — connect your wallet via 
 |---------|-------------|
 | **Wallet Connection** | RainbowKit + wagmi with Unichain Sepolia/Mainnet chain support |
 | **On-Chain Contract Info** | Live reads of hook owner, pool manager from deployed contract |
-| **Configure Pool** | Form to call `configurePool()` on-chain (owner only) |
-| **Pool Lookup** | Enter any pool ID to query live maturity phase, fee, volume, traders, age |
+| **Configure Pool** | Form to call `configurePool()` on-chain — set fee tiers, swap guards, maturity thresholds (owner only) |
+| **Initialize Pool** | Create a new Uniswap v4 pool with NovaPool as the hook via `PoolManager.initialize()` |
+| **Mint Test Tokens** | One-click mint of NOVA-A / NOVA-B demo tokens with live balance display |
+| **Add Liquidity** | Provide liquidity to a pool via Router with ERC20 approve flow and tick range selection |
+| **Swap** | Execute exact-input swaps via Router with approve flow, direction toggle, and balance display |
 | **Pool Registry** | Scans `PoolConfigured` events to list all NovaPool-managed pools |
-| **Live Event Log** | Real-time subscription to PhaseAdvanced, GraduatedFeeApplied, CooldownApplied, PoolConfigured events |
-| **Simulation Dashboard** | Interactive simulation of swap volume, time progression, and trader count to visualize fee graduation |
+| **Pool Selector** | Click any registered pool or enter a pool ID manually to view its dashboard |
+| **Pool Maturity Dashboard** | Live on-chain display of current phase, graduated fee, swap guards, volume, traders, and pool age |
+| **Fee Graduation Timeline** | Visual 4-phase timeline with active phase highlight and progress indicator |
+| **Live Event Log** | Real-time subscription to PhaseAdvanced, GraduatedFeeApplied, CooldownApplied, and PoolConfigured events |
+
+---
+
+## Demo Flow
+
+The complete user journey from zero to observing graduated fee changes:
+
+1. **Connect wallet** — Unichain Sepolia with test ETH
+2. **Mint test tokens** — get NOVA-A and NOVA-B from the faucet card
+3. **Configure pool** — set fee graduation parameters and maturity thresholds (owner only)
+4. **Initialize pool** — create the pool on Uniswap v4 PoolManager
+5. **Add liquidity** — approve both tokens to the Router, provide LP in a tick range
+6. **Swap** — execute trades; watch volume, trader count, and fees update live
+7. **Observe phase advancement** — once cumulative volume + unique traders + pool age all cross their thresholds, the pool advances from NASCENT to EMERGING (fees drop from 1.00% to 0.67%)
+8. **Test anti-manipulation** — attempt a swap > 5% of liquidity and observe the revert
 
 ---
 
@@ -234,6 +287,9 @@ If a token simultaneously meets all criteria for ESTABLISHED (perhaps through a 
 
 **Why max swap size as a percentage of liquidity?**
 A fixed dollar cap doesn't scale — $100 is a huge trade for a $1K pool but meaningless for a $10M pool. Using liquidity as the reference ensures the guard scales naturally with pool depth.
+
+**Why a separate Router contract?**
+Uniswap v4's PoolManager uses an unlock/callback pattern — `swap()` and `modifyLiquidity()` cannot be called directly from an EOA. The Router handles `poolManager.unlock()` → `unlockCallback()` → token settlement, so the frontend can execute swaps and liquidity operations with standard wallet transactions.
 
 **Why CREATE2 deployment?**
 Uniswap v4 requires hook contract addresses to encode permission flags in the lowest 14 bits. The deploy script mines a CREATE2 salt that produces an address with the correct bits set for beforeInitialize, afterInitialize, beforeSwap, and afterSwap.

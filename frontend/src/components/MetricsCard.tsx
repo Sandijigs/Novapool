@@ -20,56 +20,132 @@ function formatAge(seconds: number): string {
   return `${seconds}s`;
 }
 
-export function MetricsCard({ cumulativeVolume, uniqueTraders, age, isLoading }: MetricsCardProps) {
+const METRICS_CONFIG = [
+  {
+    label: "Volume",
+    icon: (
+      <svg
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+        />
+      </svg>
+    ),
+    color: "text-nova-cyan",
+    bg: "bg-nova-cyan/10",
+  },
+  {
+    label: "Traders",
+    icon: (
+      <svg
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+        />
+      </svg>
+    ),
+    color: "text-nova-blue",
+    bg: "bg-nova-blue/10",
+  },
+  {
+    label: "Pool Age",
+    icon: (
+      <svg
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    ),
+    color: "text-nova-green",
+    bg: "bg-nova-green/10",
+  },
+];
+
+export function MetricsCard({
+  cumulativeVolume,
+  uniqueTraders,
+  age,
+  isLoading,
+}: MetricsCardProps) {
   if (isLoading) {
     return (
-      <div className="col-span-full rounded-2xl border border-card-border bg-card p-6 animate-pulse">
-        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted">
-          Maturity Metrics
-        </h2>
-        <div className="grid grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex flex-col items-center">
-              <div className="h-8 w-20 rounded bg-card-border" />
-              <div className="mt-2 h-3 w-28 rounded bg-card-border" />
-            </div>
-          ))}
-        </div>
+      <div className="grid grid-cols-3 gap-4">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="rounded-2xl border border-card-border bg-card p-5"
+          >
+            <div className="h-3 w-14 rounded bg-card-border/60 animate-pulse" />
+            <div className="mt-4 h-7 w-20 rounded bg-card-border/60 animate-pulse" />
+          </div>
+        ))}
       </div>
     );
   }
 
-  const hasData = cumulativeVolume !== undefined;
+  const values = [
+    {
+      value: cumulativeVolume
+        ? parseFloat(formatEther(cumulativeVolume)).toFixed(4)
+        : "--",
+      unit: "ETH",
+    },
+    { value: uniqueTraders?.toString() ?? "--", unit: "unique" },
+    {
+      value: age !== undefined ? formatAge(Number(age)) : "--",
+      unit: "",
+    },
+  ];
 
   return (
-    <div className="col-span-full rounded-2xl border border-card-border bg-card p-6">
-      <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted">
-        Maturity Metrics
-      </h2>
-      {!hasData ? (
-        <p className="text-sm text-muted">Select a pool to view live metrics</p>
-      ) : (
-        <div className="grid grid-cols-3 gap-6">
-          <div className="text-center">
-            <div className="text-2xl font-bold font-mono">
-              {formatEther(cumulativeVolume)}
+    <div className="grid grid-cols-3 gap-4">
+      {METRICS_CONFIG.map((cfg, i) => (
+        <div
+          key={cfg.label}
+          className="rounded-2xl border border-card-border bg-card p-5"
+        >
+          <div className="flex items-center gap-2">
+            <div
+              className={`flex h-7 w-7 items-center justify-center rounded-lg ${cfg.bg} ${cfg.color}`}
+            >
+              {cfg.icon}
             </div>
-            <div className="mt-1 text-xs text-muted">Cumulative Volume (ETH)</div>
+            <p className="text-sm font-medium uppercase tracking-wider text-muted">
+              {cfg.label}
+            </p>
           </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold font-mono">
-              {uniqueTraders ?? 0}
-            </div>
-            <div className="mt-1 text-xs text-muted">Unique Traders</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold font-mono">
-              {age !== undefined ? formatAge(Number(age)) : "—"}
-            </div>
-            <div className="mt-1 text-xs text-muted">Pool Age</div>
-          </div>
+          <p className={`mt-3 text-3xl font-bold tabular-nums ${cfg.color}`}>
+            {values[i].value}
+            {values[i].unit && (
+              <span className="ml-1 text-sm font-normal text-muted">
+                {values[i].unit}
+              </span>
+            )}
+          </p>
         </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -4,58 +4,45 @@ import { useHookInfo } from "@/lib/useOnChainPool";
 import { HOOK_ADDRESS } from "@/lib/wagmi";
 import { useAccount } from "wagmi";
 
+function truncate(addr: string) {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
 export function OnChainStatus() {
   const { isConnected } = useAccount();
-  const { owner, poolManager, isLoading, error } = useHookInfo();
+  const { owner, poolManager, isLoading } = useHookInfo();
 
   if (!isConnected) return null;
 
+  const items = [
+    { label: "Hook", value: HOOK_ADDRESS, color: "text-nova-purple" },
+    { label: "Owner", value: owner, color: "text-nova-green" },
+    { label: "Pool Mgr", value: poolManager, color: "text-nova-cyan" },
+  ];
+
   return (
-    <div className="col-span-full rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
-        On-Chain Contract
-      </h2>
-
-      {isLoading && (
-        <p className="text-sm text-muted animate-pulse">
-          Reading contract state...
-        </p>
-      )}
-
-      {error && (
-        <p className="text-sm text-red-400">
-          Error reading contract: {error.message.slice(0, 80)}
-        </p>
-      )}
-
-      {!isLoading && !error && (
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted">Hook Address</span>
-            <span className="font-mono text-nova-cyan">
-              {HOOK_ADDRESS.slice(0, 6)}...{HOOK_ADDRESS.slice(-4)}
+    <div className="rounded-xl border border-card-border/50 bg-card/40 backdrop-blur-sm px-5 py-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center gap-2 text-sm">
+            <span className="text-muted">{item.label}</span>
+            <span className={`font-mono ${item.color}`}>
+              {isLoading
+                ? "..."
+                : item.value
+                  ? truncate(item.value)
+                  : "--"}
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Owner</span>
-            <span className="font-mono text-nova-green">
-              {owner ? `${owner.slice(0, 6)}...${owner.slice(-4)}` : "—"}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Pool Manager</span>
-            <span className="font-mono text-nova-blue">
-              {poolManager
-                ? `${poolManager.slice(0, 6)}...${poolManager.slice(-4)}`
-                : "—"}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Network</span>
-            <span className="text-nova-purple">Unichain Sepolia</span>
-          </div>
+        ))}
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted">Network</span>
+          <span className="flex items-center gap-1.5 text-nova-blue">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-nova-green" />
+            Unichain Sepolia
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
 }

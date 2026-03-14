@@ -1,28 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { parseEther } from "viem";
 import { novaPoolHookAbi } from "@/lib/abi";
-import { HOOK_ADDRESS } from "@/lib/wagmi";
+import { HOOK_ADDRESS, TOKEN_A_ADDRESS, TOKEN_B_ADDRESS } from "@/lib/wagmi";
 import { useHookInfo } from "@/lib/useOnChainPool";
 
 const DYNAMIC_FEE_FLAG = 0x800000;
+
+const inputCls =
+  "w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted/40 focus:border-nova-purple/60 focus:outline-none focus:ring-1 focus:ring-nova-purple/20 transition-colors";
+const labelCls = "text-sm text-muted mb-1 block";
 
 export function ConfigurePoolForm() {
   const { isConnected, address } = useAccount();
   const { owner } = useHookInfo();
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const { isLoading: isConfirming, isSuccess } =
+    useWaitForTransactionReceipt({ hash: txHash });
 
-  // Pool key fields
-  const [currency0, setCurrency0] = useState("");
-  const [currency1, setCurrency1] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+
+  const [currency0, setCurrency0] = useState(TOKEN_A_ADDRESS as string);
+  const [currency1, setCurrency1] = useState(TOKEN_B_ADDRESS as string);
   const [tickSpacing, setTickSpacing] = useState("60");
-
-  // Config fields with defaults matching the contract
   const [baseFee, setBaseFee] = useState("10000");
   const [matureFee, setMatureFee] = useState("500");
   const [maxSwapPctBps, setMaxSwapPctBps] = useState("500");
@@ -46,276 +52,326 @@ export function ConfigurePoolForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const poolKey = {
-      currency0: currency0 as `0x${string}`,
-      currency1: currency1 as `0x${string}`,
-      fee: DYNAMIC_FEE_FLAG,
-      tickSpacing: parseInt(tickSpacing),
-      hooks: HOOK_ADDRESS,
-    };
-
-    const config = {
-      baseFee: parseInt(baseFee),
-      matureFee: parseInt(matureFee),
-      maxSwapPctBps: parseInt(maxSwapPctBps),
-      largeTradeCooldown: parseInt(largeTradeCooldown),
-      largeTradePctBps: parseInt(largeTradePctBps),
-      volumeForEmerging: parseEther(volumeForEmerging),
-      volumeForGrowing: parseEther(volumeForGrowing),
-      volumeForEstablished: parseEther(volumeForEstablished),
-      minTradersEmerging: parseInt(minTradersEmerging),
-      minTradersGrowing: parseInt(minTradersGrowing),
-      minTradersEstablished: parseInt(minTradersEstablished),
-      minAgeEmerging: parseInt(minAgeEmerging),
-      minAgeGrowing: parseInt(minAgeGrowing),
-      minAgeEstablished: parseInt(minAgeEstablished),
-    };
+    // Sort currencies so currency0 < currency1 (must match pool key)
+    let c0 = currency0.toLowerCase() as `0x${string}`;
+    let c1 = currency1.toLowerCase() as `0x${string}`;
+    if (c0 > c1) [c0, c1] = [c1, c0];
 
     writeContract({
       address: HOOK_ADDRESS,
       abi: novaPoolHookAbi,
       functionName: "configurePool",
-      args: [poolKey, config],
+      args: [
+        {
+          currency0: c0,
+          currency1: c1,
+          fee: DYNAMIC_FEE_FLAG,
+          tickSpacing: parseInt(tickSpacing),
+          hooks: HOOK_ADDRESS,
+        },
+        {
+          baseFee: parseInt(baseFee),
+          matureFee: parseInt(matureFee),
+          maxSwapPctBps: parseInt(maxSwapPctBps),
+          largeTradeCooldown: parseInt(largeTradeCooldown),
+          largeTradePctBps: parseInt(largeTradePctBps),
+          volumeForEmerging: parseEther(volumeForEmerging),
+          volumeForGrowing: parseEther(volumeForGrowing),
+          volumeForEstablished: parseEther(volumeForEstablished),
+          minTradersEmerging: parseInt(minTradersEmerging),
+          minTradersGrowing: parseInt(minTradersGrowing),
+          minTradersEstablished: parseInt(minTradersEstablished),
+          minAgeEmerging: parseInt(minAgeEmerging),
+          minAgeGrowing: parseInt(minAgeGrowing),
+          minAgeEstablished: parseInt(minAgeEstablished),
+        },
+      ],
     });
   };
 
   return (
-    <div className="col-span-full rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-muted">
-        Configure Pool
-      </h2>
-      <p className="mb-4 text-xs text-muted">
-        Set custom fee graduation and anti-manipulation params before pool
-        initialization.{" "}
-        {!isOwner && (
-          <span className="text-nova-yellow">
-            Only the hook owner can configure pools.
-          </span>
-        )}
-      </p>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Pool Key */}
-        <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-muted mb-1">
-            Pool Key
-          </legend>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <input
-              type="text"
-              placeholder="Currency0 (0x...)"
-              value={currency0}
-              onChange={(e) => setCurrency0(e.target.value)}
-              required
-              className="rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted/50 focus:border-nova-purple focus:outline-none"
-            />
-            <input
-              type="text"
-              placeholder="Currency1 (0x...)"
-              value={currency1}
-              onChange={(e) => setCurrency1(e.target.value)}
-              required
-              className="rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted/50 focus:border-nova-purple focus:outline-none"
-            />
+    <div className="rounded-2xl border border-card-border bg-card overflow-hidden">
+      {/* Collapsible Header */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between p-5 text-left hover:bg-card-border/10 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-nova-purple/10">
+            <svg
+              className="h-4 w-4 text-nova-purple"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
           </div>
-          <input
-            type="number"
-            placeholder="Tick Spacing"
-            value={tickSpacing}
-            onChange={(e) => setTickSpacing(e.target.value)}
-            className="w-32 rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted/50 focus:border-nova-purple focus:outline-none"
-          />
-        </fieldset>
-
-        {/* Fee Config */}
-        <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-muted mb-1">
-            Fee Graduation (basis points)
-          </legend>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Base Fee</span>
-              <input
-                type="number"
-                value={baseFee}
-                onChange={(e) => setBaseFee(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Mature Fee</span>
-              <input
-                type="number"
-                value={matureFee}
-                onChange={(e) => setMatureFee(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Max Swap %</span>
-              <input
-                type="number"
-                value={maxSwapPctBps}
-                onChange={(e) => setMaxSwapPctBps(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Large Trade %</span>
-              <input
-                type="number"
-                value={largeTradePctBps}
-                onChange={(e) => setLargeTradePctBps(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
+          <div>
+            <p className="text-base font-semibold">Configure New Pool</p>
+            <p className="text-sm text-muted">
+              Set fee graduation and anti-manipulation params
+            </p>
           </div>
-          <label className="flex items-center gap-2">
-            <span className="text-xs text-muted">Cooldown (sec)</span>
-            <input
-              type="number"
-              value={largeTradeCooldown}
-              onChange={(e) => setLargeTradeCooldown(e.target.value)}
-              className="w-24 rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-            />
-          </label>
-        </fieldset>
-
-        {/* Volume Thresholds */}
-        <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-muted mb-1">
-            Volume Thresholds (ETH)
-          </legend>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Emerging</span>
-              <input
-                type="text"
-                value={volumeForEmerging}
-                onChange={(e) => setVolumeForEmerging(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Growing</span>
-              <input
-                type="text"
-                value={volumeForGrowing}
-                onChange={(e) => setVolumeForGrowing(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Established</span>
-              <input
-                type="text"
-                value={volumeForEstablished}
-                onChange={(e) => setVolumeForEstablished(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-          </div>
-        </fieldset>
-
-        {/* Trader Thresholds */}
-        <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-muted mb-1">
-            Minimum Traders
-          </legend>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Emerging</span>
-              <input
-                type="number"
-                value={minTradersEmerging}
-                onChange={(e) => setMinTradersEmerging(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Growing</span>
-              <input
-                type="number"
-                value={minTradersGrowing}
-                onChange={(e) => setMinTradersGrowing(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Established</span>
-              <input
-                type="number"
-                value={minTradersEstablished}
-                onChange={(e) => setMinTradersEstablished(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-          </div>
-        </fieldset>
-
-        {/* Age Thresholds */}
-        <fieldset className="space-y-2">
-          <legend className="text-xs font-medium text-muted mb-1">
-            Minimum Age (seconds)
-          </legend>
-          <div className="grid grid-cols-3 gap-2">
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Emerging</span>
-              <input
-                type="number"
-                value={minAgeEmerging}
-                onChange={(e) => setMinAgeEmerging(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Growing</span>
-              <input
-                type="number"
-                value={minAgeGrowing}
-                onChange={(e) => setMinAgeGrowing(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted">Established</span>
-              <input
-                type="number"
-                value={minAgeEstablished}
-                onChange={(e) => setMinAgeEstablished(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-sm text-foreground focus:border-nova-purple focus:outline-none"
-              />
-            </label>
-          </div>
-        </fieldset>
-
-        {/* Submit */}
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={!isOwner || isPending || isConfirming}
-            className="rounded-lg bg-nova-purple px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isPending
-              ? "Confirm in Wallet..."
-              : isConfirming
-                ? "Confirming..."
-                : "Configure Pool"}
-          </button>
-
-          {isSuccess && (
-            <span className="text-sm text-nova-green">
-              Pool configured on-chain!
-            </span>
-          )}
         </div>
+        <svg
+          className={`h-5 w-5 text-muted transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19 9l-7 7-7-7"
+          />
+        </svg>
+      </button>
 
-        {error && (
-          <p className="text-sm text-red-400">
-            {error.message.slice(0, 120)}
-          </p>
-        )}
-      </form>
+      {/* Collapsible Form */}
+      {isOpen && (
+        <form
+          onSubmit={handleSubmit}
+          className="border-t border-card-border p-5 space-y-5"
+        >
+          {!isOwner && (
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-sm text-red-400">
+              Only the hook owner can configure pools.
+            </div>
+          )}
+
+          {/* Pool Key */}
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wider text-muted mb-3">
+              Pool Key
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <div className="sm:col-span-2">
+                <label className={labelCls}>Currency 0</label>
+                <input
+                  type="text"
+                  placeholder="0x..."
+                  value={currency0}
+                  onChange={(e) => setCurrency0(e.target.value)}
+                  required
+                  className={inputCls}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelCls}>Currency 1</label>
+                <input
+                  type="text"
+                  placeholder="0x..."
+                  value={currency1}
+                  onChange={(e) => setCurrency1(e.target.value)}
+                  required
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Tick Spacing</label>
+                <input
+                  type="number"
+                  value={tickSpacing}
+                  onChange={(e) => setTickSpacing(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Fees & Guards */}
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wider text-muted mb-3">
+              Fees & Guards (bps)
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div>
+                <label className={labelCls}>Base Fee</label>
+                <input
+                  type="number"
+                  value={baseFee}
+                  onChange={(e) => setBaseFee(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Mature Fee</label>
+                <input
+                  type="number"
+                  value={matureFee}
+                  onChange={(e) => setMatureFee(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Max Swap %</label>
+                <input
+                  type="number"
+                  value={maxSwapPctBps}
+                  onChange={(e) => setMaxSwapPctBps(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Large Trade %</label>
+                <input
+                  type="number"
+                  value={largeTradePctBps}
+                  onChange={(e) => setLargeTradePctBps(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Cooldown (s)</label>
+                <input
+                  type="number"
+                  value={largeTradeCooldown}
+                  onChange={(e) => setLargeTradeCooldown(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Thresholds Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wider text-muted mb-3">
+                Volume Thresholds (ETH)
+              </p>
+              <div className="space-y-2">
+                <div>
+                  <label className={labelCls}>Emerging</label>
+                  <input
+                    type="text"
+                    value={volumeForEmerging}
+                    onChange={(e) => setVolumeForEmerging(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Growing</label>
+                  <input
+                    type="text"
+                    value={volumeForGrowing}
+                    onChange={(e) => setVolumeForGrowing(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Established</label>
+                  <input
+                    type="text"
+                    value={volumeForEstablished}
+                    onChange={(e) => setVolumeForEstablished(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wider text-muted mb-3">
+                Min Traders
+              </p>
+              <div className="space-y-2">
+                <div>
+                  <label className={labelCls}>Emerging</label>
+                  <input
+                    type="number"
+                    value={minTradersEmerging}
+                    onChange={(e) => setMinTradersEmerging(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Growing</label>
+                  <input
+                    type="number"
+                    value={minTradersGrowing}
+                    onChange={(e) => setMinTradersGrowing(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Established</label>
+                  <input
+                    type="number"
+                    value={minTradersEstablished}
+                    onChange={(e) => setMinTradersEstablished(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wider text-muted mb-3">
+                Min Age (seconds)
+              </p>
+              <div className="space-y-2">
+                <div>
+                  <label className={labelCls}>Emerging</label>
+                  <input
+                    type="number"
+                    value={minAgeEmerging}
+                    onChange={(e) => setMinAgeEmerging(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Growing</label>
+                  <input
+                    type="number"
+                    value={minAgeGrowing}
+                    onChange={(e) => setMinAgeGrowing(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Established</label>
+                  <input
+                    type="number"
+                    value={minAgeEstablished}
+                    onChange={(e) => setMinAgeEstablished(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={!isOwner || isPending || isConfirming}
+              className="rounded-xl bg-linear-to-r from-nova-purple to-nova-blue px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isPending
+                ? "Confirm in Wallet..."
+                : isConfirming
+                  ? "Confirming..."
+                  : "Configure Pool"}
+            </button>
+            {isSuccess && (
+              <span className="text-sm text-nova-green font-medium">
+                Pool configured!
+              </span>
+            )}
+            {error && (
+              <span className="text-sm text-red-400 truncate max-w-xs">
+                {error.message.slice(0, 80)}
+              </span>
+            )}
+          </div>
+        </form>
+      )}
     </div>
   );
 }
