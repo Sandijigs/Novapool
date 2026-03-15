@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useAccount,
   useWriteContract,
@@ -50,10 +50,46 @@ export function SwapForm({ currency0, currency1, tickSpacing = 60 }: SwapFormPro
     writeContract: writeSwap,
     data: swapTx,
     isPending: isSwapping,
-    error: swapError,
+    error: swapWriteError,
+    reset: resetSwap,
   } = useWriteContract();
-  const { isLoading: isSwapConfirming, isSuccess: swapSuccess } =
-    useWaitForTransactionReceipt({ hash: swapTx });
+  const {
+    isLoading: isSwapConfirming,
+    isSuccess: swapSuccess,
+    isError: swapReceiptError,
+    data: swapReceipt,
+  } = useWaitForTransactionReceipt({ hash: swapTx });
+
+  // Friendly error message state
+  const [swapErrorMsg, setSwapErrorMsg] = useState<string | null>(null);
+
+  // Parse errors into user-friendly messages
+  useEffect(() => {
+    if (swapWriteError) {
+      const msg = swapWriteError.message;
+      if (msg.includes("SwapExceedsMaxSize") || msg.includes("exceeds max")) {
+        setSwapErrorMsg("Swap too large — exceeds max swap size cap (5% of liquidity)");
+      } else if (msg.includes("CooldownNotExpired")) {
+        setSwapErrorMsg("Cooldown active — wait before making another large swap");
+      } else if (msg.includes("User rejected") || msg.includes("User denied")) {
+        setSwapErrorMsg("Transaction rejected");
+      } else if (msg.includes("reverted")) {
+        setSwapErrorMsg("Transaction reverted — the swap was blocked by pool guards");
+      } else {
+        setSwapErrorMsg(msg.slice(0, 120));
+      }
+    } else if (swapReceiptError || (swapReceipt && swapReceipt.status === "reverted")) {
+      setSwapErrorMsg("Transaction reverted on-chain — swap was blocked by anti-manipulation guards");
+    } else if (swapSuccess) {
+      setSwapErrorMsg(null);
+    }
+  }, [swapWriteError, swapReceiptError, swapReceipt, swapSuccess]);
+
+  // Clear error when user starts a new swap
+  const handleReset = () => {
+    resetSwap();
+    setSwapErrorMsg(null);
+  };
 
   // Read allowance for the input token
   const inputToken = zeroForOne ? c0 : c1;
@@ -93,6 +129,7 @@ export function SwapForm({ currency0, currency1, tickSpacing = 60 }: SwapFormPro
   const handleSwap = (e: React.FormEvent) => {
     e.preventDefault();
     if (!c0 || !c1 || !amount) return;
+    handleReset();
 
     // Ensure correct ordering
     let sortedC0 = c0.toLowerCase();
@@ -223,47 +260,56 @@ export function SwapForm({ currency0, currency1, tickSpacing = 60 }: SwapFormPro
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {needsApproval ? (
-            <button
-              type="button"
-              onClick={handleApprove}
-              disabled={isApproving || isApproveConfirming}
-              className="rounded-xl bg-linear-to-r from-nova-purple to-nova-blue px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isApproving
-                ? "Confirm Approve..."
-                : isApproveConfirming
-                  ? "Approving..."
-                  : "Approve Token"}
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={isSwapping || isSwapConfirming || !amount}
-              className="rounded-xl bg-linear-to-r from-nova-cyan to-nova-green px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isSwapping
-                ? "Confirm in Wallet..."
-                : isSwapConfirming
-                  ? "Swapping..."
-                  : "Swap"}
-            </button>
-          )}
-          {approveSuccess && !needsApproval && (
-            <span className="text-sm text-nova-green font-medium">
-              Approved!
-            </span>
-          )}
-          {swapSuccess && (
-            <span className="text-sm text-nova-green font-medium">
-              Swap complete!
-            </span>
-          )}
-          {swapError && (
-            <span className="text-sm text-red-400 truncate max-w-xs">
-              {swapError.message.slice(0, 80)}
-            </span>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            {needsApproval ? (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={isApproving || isApproveConfirming}
+                className="rounded-xl bg-linear-to-r from-nova-purple to-nova-blue px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isApproving
+                  ? "Confirm Approve..."
+                  : isApproveConfirming
+                    ? "Approving..."
+                    : "Approve Token"}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={isSwapping || isSwapConfirming || !amount}
+                className="rounded-xl bg-linear-to-r from-nova-cyan to-nova-green px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isSwapping
+                  ? "Confirm in Wallet..."
+                  : isSwapConfirming
+                    ? "Swapping..."
+                    : "Swap"}
+              </button>
+            )}
+            {approveSuccess && !needsApproval && (
+              <span className="text-sm text-nova-green font-medium">
+                Approved!
+              </span>
+            )}
+            {swapSuccess && (
+              <span className="text-sm text-nova-green font-medium">
+                Swap complete!
+              </span>
+            )}
+          </div>
+          {swapErrorMsg && (
+            <div className="flex items-center gap-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5">
+              <span className="text-sm text-red-400">{swapErrorMsg}</span>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="ml-auto shrink-0 rounded-lg bg-red-500/20 px-3 py-1 text-xs text-red-400 hover:bg-red-500/30 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
           )}
         </div>
       </form>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useAccount,
   useWriteContract,
@@ -36,6 +36,20 @@ export function InitializePoolForm({
   const [currency1, setCurrency1] = useState(TOKEN_B_ADDRESS as string);
   const [tickSpacing, setTickSpacing] = useState("60");
 
+  // Debug logging
+  useEffect(() => {
+    if (txHash) console.log("[InitializePool] Tx submitted:", txHash);
+  }, [txHash]);
+  useEffect(() => {
+    if (isSuccess) {
+      console.log("[InitializePool] Tx CONFIRMED:", txHash);
+      console.log("[InitializePool] Pool should now appear in registry (PoolConfigured event emitted by afterInitialize)");
+    }
+  }, [isSuccess, txHash]);
+  useEffect(() => {
+    if (error) console.error("[InitializePool] Error:", error.message);
+  }, [error]);
+
   if (!isConnected) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,6 +59,16 @@ export function InitializePoolForm({
     let c0 = currency0.toLowerCase() as `0x${string}`;
     let c1 = currency1.toLowerCase() as `0x${string}`;
     if (c0 > c1) [c0, c1] = [c1, c0];
+
+    console.log("[InitializePool] Submitting with:", {
+      poolManager: POOL_MANAGER_ADDRESS,
+      currency0: c0,
+      currency1: c1,
+      fee: DYNAMIC_FEE_FLAG,
+      tickSpacing: parseInt(tickSpacing),
+      hooks: HOOK_ADDRESS,
+      sqrtPriceX96: SQRT_PRICE_1_1.toString(),
+    });
 
     writeContract({
       address: POOL_MANAGER_ADDRESS,

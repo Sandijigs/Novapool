@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useAccount,
   useWriteContract,
@@ -26,6 +26,16 @@ export function ConfigurePoolForm() {
 
   const [isOpen, setIsOpen] = useState(false);
 
+  useEffect(() => {
+    if (txHash) console.log("[ConfigurePool] Tx submitted:", txHash);
+  }, [txHash]);
+  useEffect(() => {
+    if (isSuccess) console.log("[ConfigurePool] Tx CONFIRMED:", txHash);
+  }, [isSuccess, txHash]);
+  useEffect(() => {
+    if (error) console.error("[ConfigurePool] Error:", error.message);
+  }, [error]);
+
   const [currency0, setCurrency0] = useState(TOKEN_A_ADDRESS as string);
   const [currency1, setCurrency1] = useState(TOKEN_B_ADDRESS as string);
   const [tickSpacing, setTickSpacing] = useState("60");
@@ -34,15 +44,15 @@ export function ConfigurePoolForm() {
   const [maxSwapPctBps, setMaxSwapPctBps] = useState("500");
   const [largeTradeCooldown, setLargeTradeCooldown] = useState("60");
   const [largeTradePctBps, setLargeTradePctBps] = useState("200");
-  const [volumeForEmerging, setVolumeForEmerging] = useState("100");
-  const [volumeForGrowing, setVolumeForGrowing] = useState("1000");
-  const [volumeForEstablished, setVolumeForEstablished] = useState("10000");
-  const [minTradersEmerging, setMinTradersEmerging] = useState("10");
-  const [minTradersGrowing, setMinTradersGrowing] = useState("50");
-  const [minTradersEstablished, setMinTradersEstablished] = useState("200");
-  const [minAgeEmerging, setMinAgeEmerging] = useState("86400");
-  const [minAgeGrowing, setMinAgeGrowing] = useState("604800");
-  const [minAgeEstablished, setMinAgeEstablished] = useState("2592000");
+  const [volumeForEmerging, setVolumeForEmerging] = useState("0.01");
+  const [volumeForGrowing, setVolumeForGrowing] = useState("0.05");
+  const [volumeForEstablished, setVolumeForEstablished] = useState("0.1");
+  const [minTradersEmerging, setMinTradersEmerging] = useState("1");
+  const [minTradersGrowing, setMinTradersGrowing] = useState("1");
+  const [minTradersEstablished, setMinTradersEstablished] = useState("1");
+  const [minAgeEmerging, setMinAgeEmerging] = useState("60");
+  const [minAgeGrowing, setMinAgeGrowing] = useState("120");
+  const [minAgeEstablished, setMinAgeEstablished] = useState("180");
 
   if (!isConnected) return null;
 
@@ -57,35 +67,42 @@ export function ConfigurePoolForm() {
     let c1 = currency1.toLowerCase() as `0x${string}`;
     if (c0 > c1) [c0, c1] = [c1, c0];
 
+    const poolKey = {
+      currency0: c0,
+      currency1: c1,
+      fee: DYNAMIC_FEE_FLAG,
+      tickSpacing: parseInt(tickSpacing),
+      hooks: HOOK_ADDRESS,
+    };
+    const config = {
+      baseFee: parseInt(baseFee),
+      matureFee: parseInt(matureFee),
+      maxSwapPctBps: parseInt(maxSwapPctBps),
+      largeTradeCooldown: parseInt(largeTradeCooldown),
+      largeTradePctBps: parseInt(largeTradePctBps),
+      volumeForEmerging: parseEther(volumeForEmerging),
+      volumeForGrowing: parseEther(volumeForGrowing),
+      volumeForEstablished: parseEther(volumeForEstablished),
+      minTradersEmerging: parseInt(minTradersEmerging),
+      minTradersGrowing: parseInt(minTradersGrowing),
+      minTradersEstablished: parseInt(minTradersEstablished),
+      minAgeEmerging: parseInt(minAgeEmerging),
+      minAgeGrowing: parseInt(minAgeGrowing),
+      minAgeEstablished: parseInt(minAgeEstablished),
+    };
+
+    console.log("[ConfigurePool] Submitting...");
+    console.log("[ConfigurePool] Hook address:", HOOK_ADDRESS);
+    console.log("[ConfigurePool] Pool key:", JSON.stringify(poolKey, (_, v) => typeof v === "bigint" ? v.toString() : v));
+    console.log("[ConfigurePool] Config:", JSON.stringify(config, (_, v) => typeof v === "bigint" ? v.toString() : v));
+    console.log("[ConfigurePool] Connected address:", address);
+    console.log("[ConfigurePool] Hook owner:", owner);
+
     writeContract({
       address: HOOK_ADDRESS,
       abi: novaPoolHookAbi,
       functionName: "configurePool",
-      args: [
-        {
-          currency0: c0,
-          currency1: c1,
-          fee: DYNAMIC_FEE_FLAG,
-          tickSpacing: parseInt(tickSpacing),
-          hooks: HOOK_ADDRESS,
-        },
-        {
-          baseFee: parseInt(baseFee),
-          matureFee: parseInt(matureFee),
-          maxSwapPctBps: parseInt(maxSwapPctBps),
-          largeTradeCooldown: parseInt(largeTradeCooldown),
-          largeTradePctBps: parseInt(largeTradePctBps),
-          volumeForEmerging: parseEther(volumeForEmerging),
-          volumeForGrowing: parseEther(volumeForGrowing),
-          volumeForEstablished: parseEther(volumeForEstablished),
-          minTradersEmerging: parseInt(minTradersEmerging),
-          minTradersGrowing: parseInt(minTradersGrowing),
-          minTradersEstablished: parseInt(minTradersEstablished),
-          minAgeEmerging: parseInt(minAgeEmerging),
-          minAgeGrowing: parseInt(minAgeGrowing),
-          minAgeEstablished: parseInt(minAgeEstablished),
-        },
-      ],
+      args: [poolKey, config],
     });
   };
 
