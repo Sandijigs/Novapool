@@ -34,7 +34,7 @@ export function usePoolMaturity(poolId: `0x${string}` | undefined) {
     abi: novaPoolHookAbi,
     functionName: "getMaturityInfo",
     args: poolId ? [poolId] : undefined,
-    query: { enabled: !!poolId },
+    query: { enabled: !!poolId, refetchInterval: 5000 },
   });
 
   const result = data as

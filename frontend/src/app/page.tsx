@@ -108,7 +108,7 @@ export default function Dashboard() {
           {/* Subtle ambient glow */}
           <div className="pointer-events-none fixed inset-0 -z-10">
             <div className="absolute top-0 left-1/3 h-[500px] w-[500px] rounded-full bg-nova-purple/3 blur-[160px]" />
-            <div className="absolute bottom-0 right-1/4 h-[400px] w-[400px] rounded-full bg-nova-cyan/[0.03] blur-[140px]" />
+            <div className="absolute bottom-0 right-1/4 h-[400px] w-[400px] rounded-full bg-nova-cyan/3 blur-[140px]" />
           </div>
 
           <div className="mx-auto max-w-6xl px-6 py-8 space-y-10">
@@ -243,8 +243,8 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <InitializePoolForm />
                 <MintTestTokens />
+                <InitializePoolForm />
                 <AddLiquidityForm />
                 <SwapForm />
               </div>

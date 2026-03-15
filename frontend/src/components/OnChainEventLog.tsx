@@ -105,14 +105,21 @@ export function OnChainEventLog() {
     const fetchLogs = async (from: bigint, to: bigint): Promise<OnChainEvent[]> => {
       const results: OnChainEvent[] = [];
       try {
-        const logs = await publicClient.getLogs({
-          address: HOOK_ADDRESS,
-          fromBlock: from,
-          toBlock: to,
+        // Use raw eth_getLogs (viem's getLogs can silently fail on some RPCs)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const logs: any[] = await publicClient.request({
+          method: "eth_getLogs",
+          params: [
+            {
+              address: HOOK_ADDRESS,
+              fromBlock: `0x${from.toString(16)}`,
+              toBlock: `0x${to.toString(16)}`,
+            },
+          ],
         });
 
         for (const log of logs) {
-          const sig = log.topics[0];
+          const sig = log.topics?.[0] as string | undefined;
           if (!sig) continue;
           const type = TOPICS[sig];
           if (!type) continue;
@@ -126,7 +133,7 @@ export function OnChainEventLog() {
             type,
             message: decodeEvent(type, log.data, log.topics as `0x${string}`[]),
             txHash: log.transactionHash!,
-            blockNumber: log.blockNumber,
+            blockNumber: BigInt(log.blockNumber),
           });
         }
       } catch (err) {
@@ -138,24 +145,41 @@ export function OnChainEventLog() {
       return results;
     };
 
+    const CHUNK = BigInt(9000);
+    const MAX_INIT_CHUNKS = 15; // ~37 hours back
+
     const init = async () => {
       try {
         const currentBlock = await publicClient.getBlockNumber();
-        const from = currentBlock > BigInt(499) ? currentBlock - BigInt(499) : BigInt(0);
+        console.log("[LiveEvents] Deep scan starting from block", currentBlock.toString());
+        if (!cancelled) setDebugInfo(`Scanning history...`);
 
-        if (!cancelled) setDebugInfo(`Scanning blocks ${from}..${currentBlock}`);
+        const allHistorical: OnChainEvent[] = [];
+        let scanTo = currentBlock;
 
-        const historical = await fetchLogs(from, currentBlock);
-        historical.sort((a, b) => (a.blockNumber > b.blockNumber ? -1 : 1));
+        for (let i = 0; i < MAX_INIT_CHUNKS && scanTo > BigInt(0); i++) {
+          if (cancelled) break;
+          const scanFrom = scanTo > CHUNK ? scanTo - CHUNK : BigInt(0);
+          console.log(`[LiveEvents] Chunk ${i + 1}/${MAX_INIT_CHUNKS}: blocks ${scanFrom}..${scanTo}`);
+          const chunk = await fetchLogs(scanFrom, scanTo);
+          if (chunk.length > 0) {
+            console.log(`[LiveEvents] Chunk ${i + 1} found ${chunk.length} events!`);
+          }
+          allHistorical.push(...chunk);
+          scanTo = scanFrom;
+        }
+
+        allHistorical.sort((a, b) => (a.blockNumber > b.blockNumber ? -1 : 1));
+        console.log(`[LiveEvents] Deep scan complete: ${allHistorical.length} events found`);
 
         if (!cancelled) {
-          setEvents(historical.slice(0, 100));
+          setEvents(allHistorical.slice(0, 100));
           lastBlockRef.current = currentBlock;
           setIsWatching(true);
-          if (historical.length > 0) {
+          if (allHistorical.length > 0) {
             setDebugInfo("");
           } else {
-            setDebugInfo(`No events in blocks ${from}..${currentBlock}`);
+            setDebugInfo(`No events found in last ${MAX_INIT_CHUNKS * 9000} blocks`);
           }
         }
       } catch (err) {

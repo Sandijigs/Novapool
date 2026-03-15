@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePublicClient, useAccount } from "wagmi";
-import { novaPoolHookAbi } from "./abi";
+import { decodeAbiParameters } from "viem";
 import { HOOK_ADDRESS } from "./wagmi";
 
 export interface PoolEntry {
@@ -13,21 +13,42 @@ export interface PoolEntry {
   matureFee: number;
 }
 
-/**
- * Block ranges to try, in order from largest to smallest.
- * Unichain Sepolia's RPC rejects eth_getLogs with large ranges,
- * so we start small and fall back to even smaller windows.
- */
-const BLOCK_RANGE_ATTEMPTS = [
-  BigInt(500),
-  BigInt(2_000),
-  BigInt(5_000),
-  BigInt(10_000),
-];
+// Pre-computed keccak256("PoolConfigured(bytes32,(uint24,uint24,uint16,uint32,uint16,uint256,uint256,uint256,uint32,uint32,uint32,uint32,uint32,uint32))")
+const POOL_CONFIGURED_TOPIC =
+  "0x118967a21dd658e0dacc158168a3f461a6b208233323b32ba4789cbe5ae6b849" as const;
+
+const CONFIG_TUPLE_ABI = [
+  {
+    type: "tuple",
+    components: [
+      { name: "baseFee", type: "uint24" },
+      { name: "matureFee", type: "uint24" },
+      { name: "maxSwapPctBps", type: "uint16" },
+      { name: "largeTradeCooldown", type: "uint32" },
+      { name: "largeTradePctBps", type: "uint16" },
+      { name: "volumeForEmerging", type: "uint256" },
+      { name: "volumeForGrowing", type: "uint256" },
+      { name: "volumeForEstablished", type: "uint256" },
+      { name: "minTradersEmerging", type: "uint32" },
+      { name: "minTradersGrowing", type: "uint32" },
+      { name: "minTradersEstablished", type: "uint32" },
+      { name: "minAgeEmerging", type: "uint32" },
+      { name: "minAgeGrowing", type: "uint32" },
+      { name: "minAgeEstablished", type: "uint32" },
+    ],
+  },
+] as const;
 
 /**
- * Scans PoolConfigured events from the hook contract to build
- * a client-side registry of all NovaPool-managed pools.
+ * Unichain Sepolia's RPC rejects eth_getLogs with ranges > 10,000 blocks.
+ * We scan backwards in 9,000-block chunks to cover enough history.
+ */
+const CHUNK_SIZE = BigInt(9_000);
+const MAX_CHUNKS = 10; // 90K blocks back ≈ ~25 hours at 1s blocks
+
+/**
+ * Scans PoolConfigured events using getLogs with the known-correct
+ * topic hash, then decodes the config tuple from raw log data.
  */
 export function usePoolRegistry() {
   const { isConnected } = useAccount();
@@ -35,75 +56,123 @@ export function usePoolRegistry() {
   const [pools, setPools] = useState<PoolEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isFetchingRef = useRef(false);
+  const hasDeepScannedRef = useRef(false);
+  const poolsRef = useRef<PoolEntry[]>([]);
 
   const fetchPools = useCallback(async () => {
     if (!publicClient || !isConnected) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
 
     setIsLoading(true);
     setError(null);
 
     try {
       const currentBlock = await publicClient.getBlockNumber();
+      // Deep scan on first load, shallow poll afterwards
+      const isDeepScan = !hasDeepScannedRef.current;
+      const chunks = isDeepScan ? MAX_CHUNKS : 1;
+      console.log(`[PoolRegistry] ${isDeepScan ? "Deep" : "Poll"} scan from block ${currentBlock.toString()}`);
 
-      let logs: Awaited<ReturnType<typeof publicClient.getContractEvents>> = [];
-      let succeeded = false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allLogs: any[] = [];
+      let scanTo = currentBlock;
+      let chunksSearched = 0;
+      let anyChunkSucceeded = false;
 
-      // Try progressively smaller block ranges until one works
-      for (const range of BLOCK_RANGE_ATTEMPTS) {
-        const fromBlock = currentBlock > range ? currentBlock - range : BigInt(0);
-
+      while (chunksSearched < chunks && scanTo > BigInt(0)) {
+        const scanFrom = scanTo > CHUNK_SIZE ? scanTo - CHUNK_SIZE : BigInt(0);
         try {
-          logs = await publicClient.getContractEvents({
-            address: HOOK_ADDRESS,
-            abi: novaPoolHookAbi,
-            eventName: "PoolConfigured",
-            fromBlock,
-            toBlock: "latest",
+          const logs = await publicClient.request({
+            method: "eth_getLogs",
+            params: [
+              {
+                address: HOOK_ADDRESS,
+                topics: [POOL_CONFIGURED_TOPIC],
+                fromBlock: `0x${scanFrom.toString(16)}`,
+                toBlock: `0x${scanTo.toString(16)}`,
+              },
+            ],
           });
-          succeeded = true;
-          break;
-        } catch {
-          // This range was too large for the RPC — try a smaller one
-          continue;
+          anyChunkSucceeded = true;
+          if ((logs as unknown[]).length > 0) {
+            console.log(`[PoolRegistry] Chunk ${chunksSearched + 1} found ${(logs as unknown[]).length} logs!`);
+            allLogs.push(...(logs as unknown[]));
+          }
+        } catch (chunkErr) {
+          console.warn(`[PoolRegistry] Chunk ${chunksSearched + 1} failed:`, chunkErr);
         }
+
+        scanTo = scanFrom;
+        chunksSearched++;
       }
 
-      // If all ranged queries failed, try with no fromBlock (RPC default)
-      if (!succeeded) {
-        try {
-          logs = await publicClient.getContractEvents({
-            address: HOOK_ADDRESS,
-            abi: novaPoolHookAbi,
-            eventName: "PoolConfigured",
-          });
-          succeeded = true;
-        } catch {
-          // Final fallback failed too
-        }
+      if (isDeepScan) {
+        hasDeepScannedRef.current = true;
+        console.log(`[PoolRegistry] Deep scan complete: ${chunksSearched} chunks, ${allLogs.length} logs`);
       }
 
-      if (!succeeded) {
-        setError("Unable to scan events. The RPC may be temporarily unavailable.");
+      if (!anyChunkSucceeded) {
+        setError(
+          "Unable to scan events. The RPC may be temporarily unavailable."
+        );
         return;
       }
 
-      const entries: PoolEntry[] = logs.map((log) => {
-        const args = (log as unknown as { args: {
-          poolId: `0x${string}`;
-          config: { baseFee: number; matureFee: number };
-        } }).args;
-        return {
-          poolId: args.poolId,
+      // On poll scans with no new logs, keep existing pools
+      if (!isDeepScan && allLogs.length === 0) {
+        return;
+      }
+
+      console.log(`[PoolRegistry] Processing ${allLogs.length} logs...`);
+      const entries: PoolEntry[] = [];
+      for (const log of allLogs) {
+        const poolId = log.topics?.[1] as `0x${string}` | undefined;
+        console.log("[PoolRegistry] Log topics:", log.topics);
+        console.log("[PoolRegistry] Log data length:", log.data?.length);
+        if (!poolId) {
+          console.warn("[PoolRegistry] Skipping log - no poolId in topics[1]");
+          continue;
+        }
+
+        let baseFee = 0;
+        let matureFee = 0;
+        try {
+          const [config] = decodeAbiParameters(CONFIG_TUPLE_ABI, log.data);
+          baseFee = Number(config.baseFee);
+          matureFee = Number(config.matureFee);
+          console.log(`[PoolRegistry] Decoded pool ${poolId.slice(0, 10)}... baseFee=${baseFee} matureFee=${matureFee}`);
+        } catch (decodeErr) {
+          console.warn("[PoolRegistry] Decode failed for pool", poolId.slice(0, 10), decodeErr);
+        }
+
+        entries.push({
+          poolId,
           configuredAt: new Date(),
           txHash: log.transactionHash!,
-          baseFee: args.config?.baseFee ?? 0,
-          matureFee: args.config?.matureFee ?? 0,
-        };
-      });
+          baseFee,
+          matureFee,
+        });
+      }
 
-      setPools(entries);
+      // On poll scans, merge new entries with existing pools (dedup by poolId)
+      if (!isDeepScan && entries.length > 0) {
+        const existingIds = new Set(poolsRef.current.map((p) => p.poolId));
+        const newEntries = entries.filter((e) => !existingIds.has(e.poolId));
+        if (newEntries.length > 0) {
+          const merged = [...poolsRef.current, ...newEntries];
+          console.log(`[PoolRegistry] Merged: ${poolsRef.current.length} existing + ${newEntries.length} new = ${merged.length} pools`);
+          poolsRef.current = merged;
+          setPools(merged);
+        }
+      } else if (isDeepScan) {
+        console.log(`[PoolRegistry] Deep scan found ${entries.length} pools`);
+        poolsRef.current = entries;
+        setPools(entries);
+      }
     } catch (err) {
-      // Catch-all for unexpected errors (e.g. getBlockNumber failing)
+      console.error("[PoolRegistry] Top-level error:", err);
       const message =
         err instanceof Error && err.message.includes("HTTP request failed")
           ? "Unable to scan events. The RPC may be temporarily unavailable."
@@ -113,11 +182,14 @@ export function usePoolRegistry() {
       setError(message);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, [publicClient, isConnected]);
 
   useEffect(() => {
     fetchPools();
+    const interval = setInterval(fetchPools, 10_000);
+    return () => clearInterval(interval);
   }, [fetchPools]);
 
   return { pools, isLoading, error, refetch: fetchPools };

@@ -92,7 +92,7 @@ export function PhaseCard({ phase, progress, isLoading }: PhaseCardProps) {
               />
             </div>
             <span className="text-sm text-muted">
-              {progress}% to next
+              {progress >= 100 ? "Fully mature" : `${progress}% to next`}
             </span>
           </div>
         </div>
