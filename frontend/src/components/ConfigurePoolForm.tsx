@@ -38,7 +38,7 @@ export function ConfigurePoolForm() {
 
   const [currency0, setCurrency0] = useState(TOKEN_A_ADDRESS as string);
   const [currency1, setCurrency1] = useState(TOKEN_B_ADDRESS as string);
-  const [tickSpacing, setTickSpacing] = useState("60");
+  const [tickSpacing, setTickSpacing] = useState("200");
   const [baseFee, setBaseFee] = useState("10000");
   const [matureFee, setMatureFee] = useState("500");
   const [maxSwapPctBps, setMaxSwapPctBps] = useState("500");

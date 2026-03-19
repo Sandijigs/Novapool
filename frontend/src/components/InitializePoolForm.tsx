@@ -28,32 +28,82 @@ export function InitializePoolForm({
   onPoolInitialized,
 }: InitializePoolFormProps) {
   const { isConnected } = useAccount();
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } =
-    useWaitForTransactionReceipt({ hash: txHash });
+  const {
+    writeContract,
+    data: txHash,
+    isPending,
+    error: writeError,
+    reset: resetWrite,
+  } = useWriteContract();
+  const {
+    isLoading: isConfirming,
+    isSuccess,
+    data: receipt,
+    error: receiptError,
+  } = useWaitForTransactionReceipt({ hash: txHash });
 
   const [currency0, setCurrency0] = useState(TOKEN_A_ADDRESS as string);
   const [currency1, setCurrency1] = useState(TOKEN_B_ADDRESS as string);
-  const [tickSpacing, setTickSpacing] = useState("60");
+  const [tickSpacing, setTickSpacing] = useState("200");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Detect on-chain revert (tx mined with status 0)
+  useEffect(() => {
+    if (receipt && receipt.status === "reverted") {
+      console.error("[InitializePool] Tx REVERTED on-chain:", txHash);
+      setErrorMsg(
+        "Pool initialization reverted — this pool (token pair + tick spacing) may already exist. Try a different tick spacing."
+      );
+      resetWrite();
+    }
+  }, [receipt, txHash, resetWrite]);
+
+  // Detect write-level errors (user rejected, simulation fail, etc.)
+  useEffect(() => {
+    if (writeError) {
+      console.error("[InitializePool] Error:", writeError.message);
+      const msg = writeError.message.toLowerCase();
+      if (msg.includes("user rejected") || msg.includes("user denied")) {
+        setErrorMsg("Transaction rejected in wallet.");
+      } else if (
+        msg.includes("poolalreadyinitialized") ||
+        msg.includes("already initialized")
+      ) {
+        setErrorMsg(
+          "Pool already initialized with this token pair + tick spacing. Try a different tick spacing."
+        );
+      } else {
+        setErrorMsg(writeError.message.slice(0, 120));
+      }
+    }
+  }, [writeError]);
+
+  // Detect receipt-level errors
+  useEffect(() => {
+    if (receiptError) {
+      console.error("[InitializePool] Receipt error:", receiptError.message);
+      setErrorMsg("Transaction failed: " + receiptError.message.slice(0, 100));
+    }
+  }, [receiptError]);
 
   // Debug logging
   useEffect(() => {
     if (txHash) console.log("[InitializePool] Tx submitted:", txHash);
   }, [txHash]);
   useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess && receipt?.status === "success") {
       console.log("[InitializePool] Tx CONFIRMED:", txHash);
       console.log("[InitializePool] Pool should now appear in registry (PoolConfigured event emitted by afterInitialize)");
+      setErrorMsg(null);
     }
-  }, [isSuccess, txHash]);
-  useEffect(() => {
-    if (error) console.error("[InitializePool] Error:", error.message);
-  }, [error]);
+  }, [isSuccess, receipt, txHash]);
 
   if (!isConnected) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
+    resetWrite();
 
     // Sort currencies so currency0 < currency1
     let c0 = currency0.toLowerCase() as `0x${string}`;
@@ -154,6 +204,19 @@ export function InitializePoolForm({
           hook before initializing.
         </div>
 
+        {errorMsg && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex items-start justify-between gap-3">
+            <span>{errorMsg}</span>
+            <button
+              type="button"
+              onClick={() => { setErrorMsg(null); resetWrite(); }}
+              className="shrink-0 text-red-400 hover:text-red-300 text-xs font-semibold uppercase tracking-wide"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
           <button
             type="submit"
@@ -166,14 +229,9 @@ export function InitializePoolForm({
                 ? "Confirming..."
                 : "Initialize Pool"}
           </button>
-          {isSuccess && (
+          {isSuccess && receipt?.status === "success" && (
             <span className="text-sm text-nova-green font-medium">
               Pool initialized!
-            </span>
-          )}
-          {error && (
-            <span className="text-sm text-red-400 truncate max-w-xs">
-              {error.message.slice(0, 80)}
             </span>
           )}
         </div>
