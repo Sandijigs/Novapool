@@ -1,6 +1,7 @@
 "use client";
 
-import { useReadContract, useAccount } from "wagmi";
+import { useReadContract, useAccount, usePublicClient } from "wagmi";
+import { useEffect, useState } from "react";
 import { novaPoolHookAbi } from "./abi";
 import { HOOK_ADDRESS } from "./wagmi";
 import { MaturityPhase } from "./types";
@@ -144,4 +145,54 @@ export function useHasTraded(poolId: `0x${string}` | undefined) {
     isLoading,
     error,
   };
+}
+
+// GraduatedFeeApplied(bytes32 indexed poolId, uint8 phase, uint24 fee)
+const GRADUATED_FEE_SIG =
+  "0x4806684bda0a2c2091aac6ec4b0dd139aa034252588210dbb80b73a468e8c65b";
+
+/** Count on-chain swaps for a specific pool by reading GraduatedFeeApplied events.
+ *  Each swap emits exactly one GraduatedFeeApplied — so the count = total swaps. */
+export function useSwapCount(poolId: `0x${string}` | undefined) {
+  const publicClient = usePublicClient();
+  const [count, setCount] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!poolId || !publicClient) return;
+    let cancelled = false;
+
+    const fetchCount = async () => {
+      try {
+        const currentBlock = await publicClient.getBlockNumber();
+        const fromBlock =
+          currentBlock > BigInt(200000)
+            ? currentBlock - BigInt(200000)
+            : BigInt(0);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const logs: any[] = await publicClient.request({
+          method: "eth_getLogs",
+          params: [
+            {
+              address: HOOK_ADDRESS,
+              topics: [GRADUATED_FEE_SIG, poolId],
+              fromBlock: `0x${fromBlock.toString(16)}`,
+              toBlock: `0x${currentBlock.toString(16)}`,
+            },
+          ],
+        });
+        if (!cancelled) setCount(logs.length);
+      } catch {
+        /* retry next interval */
+      }
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [poolId, publicClient]);
+
+  return count;
 }

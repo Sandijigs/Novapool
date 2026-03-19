@@ -17,7 +17,7 @@ import { PoolRegistry } from "@/components/PoolRegistry";
 import { PoolSelector } from "@/components/PoolSelector";
 import { WalletButton } from "@/components/WalletButton";
 import { useAccount } from "wagmi";
-import { usePoolMaturity, usePoolConfig } from "@/lib/useOnChainPool";
+import { usePoolMaturity, usePoolConfig, useSwapCount } from "@/lib/useOnChainPool";
 import { MaturityPhase } from "@/lib/types";
 
 export default function Dashboard() {
@@ -28,6 +28,7 @@ export default function Dashboard() {
 
   const maturity = usePoolMaturity(selectedPoolId);
   const poolConfig = usePoolConfig(selectedPoolId);
+  const swapCount = useSwapCount(selectedPoolId);
 
   const phaseProgress = (() => {
     if (maturity.phase === undefined || !poolConfig.config) return 0;
@@ -308,6 +309,7 @@ export default function Dashboard() {
                     cumulativeVolume={maturity.cumulativeVolume}
                     uniqueTraders={maturity.uniqueTraders}
                     age={maturity.age}
+                    swapCount={swapCount}
                     isLoading={maturity.isLoading}
                   />
 

@@ -6,6 +6,7 @@ interface MetricsCardProps {
   cumulativeVolume: bigint | undefined;
   uniqueTraders: number | undefined;
   age: bigint | undefined;
+  swapCount?: number;
   isLoading?: boolean;
 }
 
@@ -81,18 +82,39 @@ const METRICS_CONFIG = [
     color: "text-nova-green",
     bg: "bg-nova-green/10",
   },
+  {
+    label: "Swaps",
+    icon: (
+      <svg
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+        />
+      </svg>
+    ),
+    color: "text-nova-purple",
+    bg: "bg-nova-purple/10",
+  },
 ];
 
 export function MetricsCard({
   cumulativeVolume,
   uniqueTraders,
   age,
+  swapCount,
   isLoading,
 }: MetricsCardProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-3 gap-4">
-        {[0, 1, 2].map((i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
             className="rounded-2xl border border-card-border bg-card p-5"
@@ -107,7 +129,7 @@ export function MetricsCard({
 
   const values = [
     {
-      value: cumulativeVolume
+      value: cumulativeVolume !== undefined
         ? parseFloat(formatEther(cumulativeVolume)).toFixed(4)
         : "--",
       unit: "ETH",
@@ -117,10 +139,14 @@ export function MetricsCard({
       value: age !== undefined ? formatAge(Number(age)) : "--",
       unit: "",
     },
+    {
+      value: swapCount !== undefined ? swapCount.toString() : "--",
+      unit: "on-chain",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       {METRICS_CONFIG.map((cfg, i) => (
         <div
           key={cfg.label}
