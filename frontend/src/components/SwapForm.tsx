@@ -29,7 +29,7 @@ interface SwapFormProps {
   tickSpacing?: number;
 }
 
-export function SwapForm({ currency0, currency1, tickSpacing = 60 }: SwapFormProps) {
+export function SwapForm({ currency0, currency1, tickSpacing = 200 }: SwapFormProps) {
   const { isConnected, address } = useAccount();
   const [amount, setAmount] = useState("");
   const [zeroForOne, setZeroForOne] = useState(true);

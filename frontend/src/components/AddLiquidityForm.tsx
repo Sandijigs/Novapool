@@ -24,7 +24,7 @@ interface AddLiquidityFormProps {
 export function AddLiquidityForm({
   currency0,
   currency1,
-  tickSpacing = 60,
+  tickSpacing = 200,
 }: AddLiquidityFormProps) {
   const { isConnected, address } = useAccount();
   const [c0, setC0] = useState(currency0 ?? TOKEN_A_ADDRESS);
